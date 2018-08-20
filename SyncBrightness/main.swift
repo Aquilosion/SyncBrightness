@@ -116,17 +116,6 @@ func serialNumber(for display: CGDirectDisplayID) -> String? {
 	return serialNumber
 }
 
-func builtInDisplayBrightness() -> Float {
-	let service = IOServiceGetMatchingService(kIOMasterPortDefault, IOServiceMatching("IODisplayConnect"))
-	
-	var level: Float = 0
-	IODisplayGetFloatParameter(service, 0, kIODisplayBrightnessKey as CFString, &level)
-	
-	IOObjectRelease(service)
-	
-	return level
-}
-
 func externalDisplays() -> [CGDirectDisplayID] {
 	return NSScreen.screens.compactMap { screen in
 		let description = screen.deviceDescription
@@ -154,32 +143,97 @@ func setBrightness(for display: CGDirectDisplayID, value: Float) -> Bool {
 	}
 	
 	let adjustmentRange = brightnessRange(for: display)
-	let adjusted = UInt32((min(max(adjustmentRange.lowerBound + value * (adjustmentRange.upperBound - adjustmentRange.lowerBound), 0), 1) * 100).rounded())
+	
+	let brightness = UInt32(max(min((value - adjustmentRange.lowerBound) / (adjustmentRange.upperBound - adjustmentRange.lowerBound), 1), 0) * 100)
 	
 	let controlId = UInt32(BRIGHTNESS)
-	setControl(display, controlId, adjusted)
+	setControl(display, controlId, brightness)
 	
 	return true
 }
 
-func updateBrightness(_ brightness: Float) {
+/*func getBrightness(for display: CGDirectDisplayID) -> Float {
+	var edid = EDID()
+	
+	guard EDIDTest(display, &edid) else {
+		print("Failed to poll display!")
+		return 0
+	}
+	
+	let controlId = UInt32(BRIGHTNESS)
+	let brightness = getControl(display, controlId)
+	
+	return Float(brightness) / 100
+}*/
+
+func updateBrightness() {
+	print("BRIGHTNESS: \(currentBrightness)")
+	
+	let totalRange = getTotalRange()
+	let adjustedBrightness = totalRange.lowerBound + (totalRange.upperBound - totalRange.lowerBound) * currentBrightness
+	
 	let displays = externalDisplays()
 	
 	for display in displays {
-		_ = setBrightness(for: display, value: brightness)
+		_ = setBrightness(for: display, value: adjustedBrightness)
 	}
 }
 
-var currentBrightness = builtInDisplayBrightness()
-updateBrightness(currentBrightness)
-
-repeat {
-	let newBrightness = builtInDisplayBrightness()
+func getTotalRange() -> ClosedRange<Float> {
+	let brightnessRanges = externalDisplays().map(brightnessRange)
 	
-	if newBrightness != currentBrightness {
-		currentBrightness = newBrightness
-		updateBrightness(currentBrightness)
+	guard let firstRange = brightnessRanges.first else {
+		return standardBrightnessRange
 	}
 	
-	sleep(1)
-} while true
+	let totalRange = brightnessRanges.dropFirst().reduce(firstRange, { min($0.lowerBound, $1.lowerBound) ... max($0.upperBound, $1.upperBound) })
+	
+	return totalRange
+}
+
+var currentBrightness: Float = 0.5
+
+func acquirePrivileges() -> Bool {
+	let accessEnabled = AXIsProcessTrustedWithOptions([
+		kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true
+	] as CFDictionary)
+	
+	if accessEnabled != true {
+		print("You need to enable the keylogger in the System Preferences")
+	}
+	
+	return accessEnabled == true
+}
+
+class ApplicationDelegate: NSObject, NSApplicationDelegate {
+	func applicationDidFinishLaunching(_ notification: Notification) {
+		guard acquirePrivileges() else {
+			exit(1)
+		}
+		
+		NSEvent.addGlobalMonitorForEvents(
+			matching: NSEvent.EventTypeMask.keyDown,
+			handler: { event in
+				let f1: UInt16 = 122
+				let f2: UInt16 = 120
+				
+				let delta: Float = 1 / 16
+				
+				if event.keyCode == f1 {
+					currentBrightness = max(0, currentBrightness - delta)
+					updateBrightness()
+				} else if event.keyCode == f2 {
+					currentBrightness = min(1, currentBrightness + delta)
+					updateBrightness()
+				}
+			}
+		)
+	}
+}
+
+let application = NSApplication.shared
+let applicationDelegate = ApplicationDelegate()
+
+application.delegate = applicationDelegate
+application.activate(ignoringOtherApps: true)
+application.run()
