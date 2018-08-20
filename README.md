@@ -1,6 +1,6 @@
 # SyncBrightness
 
-Automatically synchronises your Mac's built-in display brightness with all attached monitors using [DDC](https://en.wikipedia.org/wiki/Display_Data_Channel). Builds upon [ddcctl](kfix/ddcctl) by periodically reading the built-in display brightness and copying it to the external monitors.
+Automatically synchronises your Mac's built-in display brightness with all attached monitors using [DDC](https://en.wikipedia.org/wiki/Display_Data_Channel). Builds upon [ddcctl](https://github.com/kfix/ddcctl) by periodically reading the built-in display brightness and copying it to the external monitors.
 
 ## Building
 
@@ -18,13 +18,11 @@ An optional `.SyncBrightness.conf` can be added to your home folder, which SyncB
 ABC123456789 -0.5 1.0
 ```
 
-|----------|------------|
 | Built-in | External   |
-|----------|------------|
+| -------- | ---------- |
 | 0.0      | -0.5 → 0.0 |
 | 0.2      | -0.2 → 0.0 |
 | 0.4      | 0.1        |
 | 0.6      | 0.4        |
 | 0.8      | 0.7        |
 | 1.0      | 1.0        |
-|----------|------------|
